@@ -45,15 +45,14 @@ MCN_DEFINE(ins_output, sizeof(INS_Out_Bus));
 /* define parameters */
 static param_t __param_list[] = {
     PARAM_FLOAT(GPS_HOR_Q_BIAS, 2.5, false),
-    PARAM_FLOAT(GPS_HOR_Q_SCALE, 0.4, false),
+    PARAM_FLOAT(GPS_HOR_Q_SCALE, 0.5, false),
     PARAM_FLOAT(GPS_VER_Q_BIAS, 4.5, false),
     PARAM_FLOAT(GPS_VER_Q_SCALE, 0.25, false),
     PARAM_FLOAT(GPS_VEL_Q_BIAS, 1, false),
     PARAM_FLOAT(GPS_VEL_Q_SCALE, 1, false),
     PARAM_FLOAT(ATT_GAIN, 0.2, false),
     PARAM_FLOAT(HEADING_GAIN, 0.05, false),
-    PARAM_FLOAT(MAG_GAIN, 0.2, false),
-    PARAM_FLOAT(HOVER_MAG_GAIN, 0.0, false),
+    PARAM_FLOAT(MAG_GAIN, 0.3, false),
     PARAM_UINT8(MAG_AIR_EN, 0, false),
     PARAM_FLOAT(BIAS_G_GAIN, 0.25, false),
     PARAM_FLOAT(GPS_POS_GAIN, 0, false),
@@ -77,6 +76,7 @@ static param_t __param_list[] = {
     PARAM_FLOAT(EXTPOS_VEL_GAIN, 1.5, false),
     PARAM_FLOAT(EXTPOS_BIAS_A_GAIN, 0.1, false),
     PARAM_UINT32(EXTPOS_POS_DELAY, 20, false),
+    PARAM_UINT8(TERRAIN_TRACK, 1, false),
 };
 PARAM_GROUP_DEFINE(INS, __param_list);
 
@@ -329,10 +329,10 @@ static void init_parameter(void)
     FMT_CHECK(param_link_variable(PARAM_GET(INS, ATT_GAIN), &INS_PARAM.ATT_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, HEADING_GAIN), &INS_PARAM.HEADING_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, MAG_GAIN), &INS_PARAM.MAG_GAIN));
-    FMT_CHECK(param_link_variable(PARAM_GET(INS, HOVER_MAG_GAIN), &INS_PARAM.HOVER_MAG_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, MAG_AIR_EN), &INS_PARAM.MAG_AIR_EN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, BIAS_G_GAIN), &INS_PARAM.BIAS_G_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, GPS_POS_GAIN), &INS_PARAM.GPS_POS_GAIN));
+    FMT_CHECK(param_link_variable(PARAM_GET(INS, GPS_ALT_GAIN), &INS_PARAM.GPS_ALT_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, GPS_VEL_GAIN), &INS_PARAM.GPS_VEL_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, GPS_BIAS_A_GAIN), &INS_PARAM.GPS_BIAS_A_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, GPS_POS_DELAY), &INS_PARAM.GPS_POS_DELAY));
@@ -352,6 +352,7 @@ static void init_parameter(void)
     FMT_CHECK(param_link_variable(PARAM_GET(INS, EXTPOS_VEL_GAIN), &INS_PARAM.EXTPOS_VEL_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, EXTPOS_BIAS_A_GAIN), &INS_PARAM.EXTPOS_BIAS_A_GAIN));
     FMT_CHECK(param_link_variable(PARAM_GET(INS, EXTPOS_POS_DELAY), &INS_PARAM.EXTPOS_POS_DELAY));
+    FMT_CHECK(param_link_variable(PARAM_GET(INS, TERRAIN_TRACK), &INS_PARAM.TERRAIN_TRACK));
 }
 
 void ins_interface_step(uint32_t timestamp)

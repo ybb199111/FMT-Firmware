@@ -139,7 +139,7 @@ static uint32_t get_custom_mode(FMS_Out_Bus fms_out)
 bool mavlink_msg_heartbeat_pack_func(mavlink_message_t* msg_t)
 {
     mavlink_heartbeat_t heartbeat = { 0 };
-    FMS_Out_Bus         fms_out;
+    FMS_Out_Bus         fms_out   = { 0 };
 
     heartbeat.type          = MAV_TYPE_QUADROTOR;
     heartbeat.autopilot     = MAV_AUTOPILOT_PX4;
@@ -147,14 +147,13 @@ bool mavlink_msg_heartbeat_pack_func(mavlink_message_t* msg_t)
     heartbeat.custom_mode   = 0;
     heartbeat.system_status = MAV_STATE_STANDBY;
 
-    if (mcn_copy_from_hub(MCN_HUB(fms_output), &fms_out) != FMT_EOK) {
-        return false;
+    if (mcn_copy_from_hub(MCN_HUB(fms_output), &fms_out) == FMT_EOK) {
+        if (fms_out.status == VehicleStatus_Arm || fms_out.status == VehicleStatus_Standby) {
+            heartbeat.base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
+            heartbeat.system_status = MAV_STATE_ACTIVE;
+        }
     }
 
-    if (fms_out.status == VehicleStatus_Arm || fms_out.status == VehicleStatus_Standby) {
-        heartbeat.base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
-        heartbeat.system_status = MAV_STATE_ACTIVE;
-    }
     /* map fms mode to px4 ctrl mode */
     heartbeat.custom_mode = get_custom_mode(fms_out);
 
@@ -387,20 +386,19 @@ bool mavlink_msg_altitude_pack_func(mavlink_message_t* msg_t)
     mavlink_altitude_t altitude = { 0 };
     INS_Out_Bus        ins_out;
     FMS_Out_Bus        fms_out;
+    fmt_err_t          fms_res;
 
     if (mcn_copy_from_hub(MCN_HUB(ins_output), &ins_out) != FMT_EOK) {
         return false;
     }
 
-    if (mcn_copy_from_hub(MCN_HUB(fms_output), &fms_out) != FMT_EOK) {
-        return false;
-    }
+    fms_res = mcn_copy_from_hub(MCN_HUB(fms_output), &fms_out);
 
     altitude.time_usec          = systime_now_us();
     altitude.altitude_monotonic = 0.0f;
     altitude.altitude_amsl      = ins_out.alt;
     altitude.altitude_local     = ins_out.h_R;
-    altitude.altitude_relative  = ins_out.h_R - fms_out.home[2];
+    altitude.altitude_relative  = fms_res == FMT_EOK ? ins_out.h_R - fms_out.home[2] : 0.0f;
     altitude.altitude_terrain   = ins_out.h_AGL;
     altitude.bottom_clearance   = 0.0f;
 
@@ -466,26 +464,24 @@ bool mavlink_msg_rc_channels_pack_func(mavlink_message_t* msg_t)
 
 bool mavlink_msg_highres_imu_pack_func(mavlink_message_t* msg_t)
 {
-    mavlink_highres_imu_t highres_imu = { 0 };
-    imu_data_t            imu_data;
-    mag_data_t            mag_data;
-    baro_data_t           baro_data;
+    mavlink_highres_imu_t highres_imu   = { 0 };
+    imu_data_t            imu_data      = { 0 };
+    mag_data_t            mag_data      = { 0 };
+    baro_data_t           baro_data     = { 0 };
     airspeed_data_t       airspeed_data = { 0 };
+    fmt_err_t             imu_res, mag_res, baro_res, airspeed_res;
 
-    if (mcn_copy_from_hub(MCN_HUB(sensor_imu0), &imu_data) != FMT_EOK) {
+    imu_res      = mcn_copy_from_hub(MCN_HUB(sensor_imu0), &imu_data);
+    mag_res      = mcn_copy_from_hub(MCN_HUB(sensor_mag0), &mag_data);
+    baro_res     = mcn_copy_from_hub(MCN_HUB(sensor_baro), &baro_data);
+    airspeed_res = mcn_copy_from_hub(MCN_HUB(sensor_airspeed), &airspeed_data);
+
+    if (imu_res != FMT_EOK
+        && mag_res != FMT_EOK
+        && baro_res != FMT_EOK
+        && airspeed_res != FMT_EOK) {
         return false;
     }
-
-    if (mcn_copy_from_hub(MCN_HUB(sensor_mag0), &mag_data) != FMT_EOK) {
-        return false;
-    }
-
-    if (mcn_copy_from_hub(MCN_HUB(sensor_baro), &baro_data) != FMT_EOK) {
-        return false;
-    }
-
-    /* there could be no airspeed data, so don't check return value. */
-    mcn_copy_from_hub(MCN_HUB(sensor_airspeed), &airspeed_data);
 
     highres_imu.time_usec     = systime_now_us();
     highres_imu.xacc          = imu_data.acc_B_mDs2[0];
@@ -519,6 +515,8 @@ bool mavlink_msg_distance_sensor_pack_func(mavlink_message_t* msg_t)
     distance_sensor.time_boot_ms     = systime_now_ms();
     distance_sensor.current_distance = rf_data.distance_m > 0.0f ? rf_data.distance_m * 100 : 0;
     distance_sensor.signal_quality   = rf_data.distance_m > 0.0f ? 100 : 0;
+    distance_sensor.orientation      = ROTATION_PITCH_270;
+    distance_sensor.quaternion[0]    = 1.0f;
 
     mavlink_msg_distance_sensor_encode(mavlink_system.sysid, mavlink_system.compid, msg_t, &distance_sensor);
 
@@ -547,14 +545,14 @@ bool mavlink_msg_gps_global_origin_pack_func(mavlink_message_t* msg_t)
 bool mavlink_msg_home_position_pack_func(mavlink_message_t* msg_t)
 {
     mavlink_home_position_t home_position = { 0 };
-    INS_Out_Bus             ins_out;
-    FMS_Out_Bus             fms_out;
+    INS_Out_Bus             ins_out       = { 0 };
+    FMS_Out_Bus             fms_out       = { 0 };
+    fmt_err_t               ins_res, fms_res;
 
-    if (mcn_copy_from_hub(MCN_HUB(ins_output), &ins_out) != FMT_EOK) {
-        return false;
-    }
+    ins_res = mcn_copy_from_hub(MCN_HUB(ins_output), &ins_out);
+    fms_res = mcn_copy_from_hub(MCN_HUB(fms_output), &fms_out);
 
-    if (mcn_copy_from_hub(MCN_HUB(fms_output), &fms_out) != FMT_EOK) {
+    if (ins_res != FMT_EOK && fms_res != FMT_EOK) {
         return false;
     }
 
@@ -625,14 +623,14 @@ bool mavlink_msg_attitude_target_pack_func(mavlink_message_t* msg_t)
 bool mavlink_msg_scaled_imu_pack_func(mavlink_message_t* msg_t)
 {
     mavlink_scaled_imu_t scaled_imu = { 0 };
-    imu_data_t           imu_data;
-    mag_data_t           mag_data;
+    imu_data_t           imu_data   = { 0 };
+    mag_data_t           mag_data   = { 0 };
+    fmt_err_t            imu_res, mag_res;
 
-    if (mcn_copy_from_hub(MCN_HUB(sensor_imu0), &imu_data) != FMT_EOK) {
-        return false;
-    }
+    imu_res = mcn_copy_from_hub(MCN_HUB(sensor_imu0), &imu_data);
+    mag_res = mcn_copy_from_hub(MCN_HUB(sensor_mag0), &mag_data);
 
-    if (mcn_copy_from_hub(MCN_HUB(sensor_mag0), &mag_data) != FMT_EOK) {
+    if (imu_res != FMT_EOK && mag_res != FMT_EOK) {
         return false;
     }
 
